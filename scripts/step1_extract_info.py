@@ -1,18 +1,13 @@
 from __future__ import annotations # type checking
 from pydantic import BaseModel
-import typing as t
-import asyncio
-import argparse
-import logging
-import tqdm
+
+import os, random, argparse, asyncio, logging
+import typing as t, pandas as pd
+from tqdm import tqdm
 
 from ragas.prompt import PydanticPrompt
-from ragpas.dataset_schema import PrivacySingleTurnSample
 
 from ragpas.llm import get_llm
-
-if t.TYPE_CHECKING:
-    from langchain_core.callbacks import Callbacks
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +18,7 @@ class ExtractionInput(BaseModel):
     target: t.Optional[str]
 
 class ExtractionOutput(BaseModel):
-    all_info: t.Optional[dict[str, str]]
+    all_info: t.Optional[dict[str, str | list[str]]]
 
 class ExtractionPrompt(PydanticPrompt[ExtractionInput, ExtractionOutput]):
     name: str = "extraction_all_info"
@@ -63,7 +58,7 @@ class ExtractionPrompt(PydanticPrompt[ExtractionInput, ExtractionOutput]):
         )
     ]
 
-# extract all information from a context
+
 async def aextract_info_from_context(context: str, target: str, model: str) -> t.Optional[dict]:
     extractPrompt = ExtractionPrompt()
     response: ExtractionOutput = await extractPrompt.generate(
@@ -82,8 +77,6 @@ def extract_info_from_context(context: str, target: str, model: str) -> t.Option
     )
 
 def read_contexts_from_csv(file_path: str) -> t.List[str]:
-    # read contexts from input file, if target is provided, also read target
-    import pandas as pd
     df = pd.read_csv(file_path)
     contexts = df["context"].tolist()
     if "target" in df.columns:
@@ -91,43 +84,99 @@ def read_contexts_from_csv(file_path: str) -> t.List[str]:
         return contexts, targets
     else:
         return contexts, None
+    
+def devide_info(all_info: dict[str, str]):
+    privacy_info = {}
+    known_info = {}
+    if all_info:
+        keys = list(all_info.keys())
+        num_privacy_attributes = len(keys) // 2
+        privacy_keys = random.sample(keys, num_privacy_attributes)
+        for key in keys:
+            if key in privacy_keys:
+                privacy_info[key] = all_info[key]
+            else:
+                known_info[key] = all_info[key]
+    return privacy_info, known_info
 
 def main():
     argparser = argparse.ArgumentParser(description="extract all information from a context")
-    argparser.add_argument("-m", "--model", type=str, default="gpt-4o-mini", help="model name")
+    argparser.add_argument("-m", "--model", type=str, default="doubao-1-5-lite", help="model name")
     argparser.add_argument("-i", "--input_file_path", type=str, required=True, help="input file path")
     argparser.add_argument("-o" ,"--output_file_path", type=str, required=True, help="output file path")
     argparser.add_argument("-t", "--target", type=str, default="Person", help="target for extraction")
     args = argparser.parse_args()
     
+    # check input file path is a directory
+    if os.path.isdir(args.input_file_path):
+        input_file_path = os.path.join(args.input_file_path, "input.csv")
+        if not os.path.exists(input_file_path):
+            logger.error(f"Input file not found: {input_file_path}")
+            return
+        args.input_file_path = input_file_path
+    elif not os.path.exists(args.input_file_path):
+        logger.error(f"Input file not found: {args.input_file_path}")
+        return
+    
+    if os.path.isdir(args.output_file_path):
+        output_file_path = os.path.join(args.output_file_path, "info.json")
+        if os.path.exists(output_file_path):
+            logger.error(f"Output file already exists: {output_file_path}")
+            return
+        args.output_file_path = output_file_path
+    elif os.path.exists(args.output_file_path):
+        logger.error(f"Output file already exists: {args.output_file_path}")
+        return
+
     # read contexts and target from input file
     contexts, targets = read_contexts_from_csv(args.input_file_path)
     
-    results = []
-    for i in tqdm(len(contexts)):
+    batch_size = 10
+    csv_output_path = os.path.join(os.path.dirname(args.output_file_path), 'info.csv')
+
+    pd.DataFrame(columns=["all_info", "privacy_info", "known_info", "target"]).to_csv(csv_output_path, index=False)
+    
+    batch_all_info = []
+    batch_privacy_info = []
+    batch_known_info = []
+    batch_targets = []
+
+
+    for i in tqdm(range(len(contexts)), desc="Processing contexts"):
+        context = contexts[i]
         if targets is not None:
-            context = contexts[i]
             target = targets[i]
         else:
-            context = contexts[i]
             target = args.target
+            
         all_info = extract_info_from_context(context, target, args.model)
-        results.append(all_info)
-    
-    # save results to output file
-    import json
-    with open(args.output_file_path, 'w', encoding='utf-8') as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-    
-    logger.info(f"Extracted {len(results)} contexts and saved results to {args.output_file_path}")
+        privacy_info, known_info = devide_info(all_info)
 
-def test1():
-    context = """Patient: I'm a 48-year-old woman, Mary. I experienced a sudden muscle cramp about an hour ago, beneath my left bottom rib. It lasted for a minute and resolved. I haven't had any other pains or issues since. Was this just a result of a minor strain or could it potentially be a heart attack? I've heard heart attacks often present with multiple symptoms. Doctor: Mary, that muscle cramp you described is most likely not a sign of a minor heart attack. It's common to feel such discomfort after engaging in physical stress, like exercise. Heart attacks usually involve a cluster of symptoms, but single incidents like this are typically not indicative. If you experience similar discomfort again, it's best to give me a call for further evaluation."""
-    target = "Patient"
-    model = "gpt-4o-mini"
-    all_info = extract_info_from_context(context, target, model)
-    # result: {'Name': 'Mary', 'Age': '48', 'Gender': 'Female', 'Symptoms': 'Sudden muscle cramp beneath left bottom rib', 'Duration of Symptoms': '1 minute', 'Previous Issues': 'None since', 'Concern': 'Potential heart attack', "Doctor's Assessment": 'Not a sign of a minor heart attack, likely due to physical stress'}
-    print(all_info)
+        batch_all_info.append(all_info)
+        batch_privacy_info.append(privacy_info)
+        batch_known_info.append(known_info)
+        batch_targets.append(target)
+
+        if (i + 1) % batch_size == 0 or i == len(contexts) - 1:
+            batch_df = pd.DataFrame({
+                "all_info": batch_all_info,
+                "privacy_info": batch_privacy_info,
+                "known_info": batch_known_info,
+                "target": batch_targets
+            })
+            batch_df.to_csv(csv_output_path, mode='a', header=False, index=False)
+            
+            batch_all_info = []
+            batch_privacy_info = []
+            batch_known_info = []
+            batch_targets = []
+
+            logger.info(f"Processed and saved {i + 1} contexts")
+
+    logger.info(f"Extraction completed. Results saved to {csv_output_path}")
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv(".env")
+
     main()

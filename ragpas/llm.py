@@ -10,7 +10,8 @@ def get_llm(model: str) -> LangchainLLMWrapper:
     model_dict = {
         'gpt-4o': 'gpt-4o',
         'gpt-4o-mini': 'gpt-4o-mini',
-        'deepseek-reasoner': 'deepseek-ai/deepseek-r1'
+        'deepseek-reasoner': 'deepseek-ai/deepseek-r1',
+        'doubao-1-5-lite': 'doubao-1-5-lite-32k-250115',
     }
     if model not in model_dict:
         raise ValueError(f"Model {model} is not supported. Supported models are {model_dict.keys()}")
