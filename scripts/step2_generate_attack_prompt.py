@@ -1,8 +1,9 @@
 from __future__ import annotations # type checking
 from pydantic import BaseModel
 
-import os, random, argparse, asyncio, logging, tqdm
+import os, random, argparse, asyncio, logging
 import typing as t, pandas as pd
+from tqdm import tqdm
 
 from ragas.prompt import PydanticPrompt
 
@@ -82,12 +83,18 @@ class GenerationPrompt(PydanticPrompt[GenerationInput, GenerationOutput]):
 
 def read_privacy_info_known_info_from_csv(file_path: str):
     df = pd.read_csv(file_path)
-    privacy_info = df["privacy_info"].to_dict()
-    known_info = df["known_info"].to_dict()
-    return privacy_info, known_info
+    privacy_info_list = df["privacy_info"].to_list()
+    known_info_list = df["known_info"].to_list()
 
-async def agenerate_attack_prompt(privacy_info_types: list[str], known_info: dict[str, str | list[str]], target: str) -> str:
-    evaluator_llm = get_llm("gpt-4o-mini")
+    # convert string to dict
+    known_info_list = [eval(known_info) for known_info in known_info_list]
+    privacy_info_list = [eval(privacy_info) for privacy_info in privacy_info_list]
+
+    target_list = df["target"].to_list()
+    return privacy_info_list, known_info_list, target_list
+
+async def agenerate_attack_prompt(privacy_info_types: list[str], known_info: dict[str, str | list[str]], target: str, model: str) -> str:
+    evaluator_llm = get_llm("doubao-1-5-lite")
     prompt = GenerationPrompt()
     response: GenerationOutput = await prompt.generate(
         data=GenerationInput(
@@ -99,10 +106,10 @@ async def agenerate_attack_prompt(privacy_info_types: list[str], known_info: dic
     )
     return response.attack_prompt
 
-def generate_attack_prompt(privacy_info_types: list[str], known_info: dict[str, str | list[str]], target: str) -> str:
+def generate_attack_prompt(privacy_info_types: list[str], known_info: dict[str, str | list[str]], target: str, model: str) -> str:
     loop = asyncio.get_event_loop()
     return loop.run_until_complete(
-        agenerate_attack_prompt(privacy_info_types=privacy_info_types, known_info=known_info, target=target)
+        agenerate_attack_prompt(privacy_info_types=privacy_info_types, known_info=known_info, target=target, model=model)
     )
 
 def main():
@@ -110,12 +117,60 @@ def main():
     argparser.add_argument("-m", "--model", type=str, default="doubao-1-5-lite", help="model name")
     argparser.add_argument("-i", "--input_file_path", type=str, required=True, help="input file path")
     argparser.add_argument("-o" ,"--output_file_path", type=str, required=True, help="output file path")
-    
     args = argparser.parse_args()
-    privacy_info, known_info = read_privacy_info_known_info_from_csv(args.input_file_path)
-    attack_prompt = generate_attack_prompt(privacy_info_types=privacy_info.keys(), known_info=known_info, target="Person")
-    with open(args.output_file_path, "w") as f:
-        f.write(attack_prompt)
+
+    if os.path.isdir(args.input_file_path):
+        input_file_path = os.path.join(args.input_file_path, "info.csv")
+        if not os.path.exists(input_file_path):
+            logger.error(f"File {input_file_path} does not exist")
+            return
+        args.input_file_path = input_file_path
+    elif not os.path.exists(args.input_file_path):
+        logger.error(f"File {args.input_file_path} does not exist")
+        return
+    
+    if os.path.isdir(args.output_file_path):
+        output_file_path = os.path.join(args.output_file_path, "attack_prompt.csv")
+        if os.path.exists(output_file_path):
+            logger.error(f"File {output_file_path} already exists")
+            return
+        args.output_file_path = output_file_path
+    elif os.path.exists(args.output_file_path):
+        logger.error(f"File {args.output_file_path} already exists")
+        return
+
+    privacy_info_list, known_info_list, target_list = read_privacy_info_known_info_from_csv(args.input_file_path)
+
+    batch_size = 10
+    csv_output_path = os.path.join(os.path.dirname(args.output_file_path), "attack_prompt.csv")
+
+    pd.DataFrame(columns=["privacy_info", "target", "attack_prompt"]).to_csv(csv_output_path, index=False)
+
+    batch_privacy_info_list = []
+    batch_target_list = []
+    batch_attack_prompt_list = []
+
+    for i, (privacy_info, known_info, target) in tqdm(enumerate(zip(privacy_info_list, known_info_list, target_list))):
+        attack_prompt = generate_attack_prompt(privacy_info_types=privacy_info.keys(), known_info=known_info, target=target, model=args.model)
+        batch_privacy_info_list.append(privacy_info)
+        batch_target_list.append(target)
+        batch_attack_prompt_list.append(attack_prompt)
+
+        if (i + 1) % batch_size == 0 or i == len(privacy_info_list) - 1:
+            df = pd.DataFrame({
+                "privacy_info": batch_privacy_info_list,
+                "target": batch_target_list,
+                "attack_prompt": batch_attack_prompt_list
+            })
+            df.to_csv(csv_output_path, mode="a", header=False, index=False)
+
+            batch_privacy_info_list = []
+            batch_target_list = []
+            batch_attack_prompt_list = []
+
+            logger.info(f"Gernerated attack prompts for {i + 1} samples")
+
+    logger.info(f"Attack prompts saved to {csv_output_path}")
 
 if __name__ == "__main__":
     main()
