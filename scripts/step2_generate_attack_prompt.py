@@ -150,7 +150,7 @@ def main():
     batch_target_list = []
     batch_attack_prompt_list = []
 
-    for i, (privacy_info, known_info, target) in tqdm(enumerate(zip(privacy_info_list, known_info_list, target_list))):
+    for i, (privacy_info, known_info, target) in tqdm(enumerate(zip(privacy_info_list, known_info_list, target_list)), desc="Generating attack prompts"):
         attack_prompt = generate_attack_prompt(privacy_info_types=privacy_info.keys(), known_info=known_info, target=target, model=args.model)
         batch_privacy_info_list.append(privacy_info)
         batch_target_list.append(target)
