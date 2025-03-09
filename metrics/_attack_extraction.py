@@ -142,6 +142,9 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
         }
     )
 
+    # if output classifications
+    feedback: bool = False
+
     # rubric for the metric
     rubric: dict[str, str] = field(default_factory=lambda: DEFAULT_ATTACK_EXTRACTION_RUBRICS)
 
@@ -171,6 +174,10 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
             score = sum(response_score) / len(response_score)
         elif self.score_rubric == ComputeRubric.MODE:
             score = get_mode(response_score)
+
+        if self.feedback:
+            feedback = [classif.model_dump() for classif in responses]
+            return float(score), feedback
         return float(score)
     
     async def _single_turn_ascore(
