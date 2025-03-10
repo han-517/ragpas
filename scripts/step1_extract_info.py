@@ -134,6 +134,10 @@ def main():
     batch_size = 10
     csv_output_path = os.path.join(os.path.dirname(args.output_file_path), 'info.csv')
 
+    if os.path.exists(csv_output_path):
+        logger.error(f"Output file already exists: {csv_output_path}")
+        return
+    
     pd.DataFrame(columns=["all_info", "privacy_info", "known_info", "target"]).to_csv(csv_output_path, index=False)
     
     batch_all_info = []
