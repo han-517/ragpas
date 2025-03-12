@@ -1,6 +1,6 @@
 from __future__ import annotations # type checking
 
-import logging
+import logging, asyncio
 import typing as t
 
 from dataclasses import dataclass, field
@@ -15,6 +15,7 @@ from ragas.metrics.base import (
 )
 from ragas.prompt import PydanticPrompt
 from ragpas.dataset_schema import PrivacySingleTurnSample
+from ragas.callbacks import ChainType, new_group
 
 if t.TYPE_CHECKING:
     from langchain_core.callbacks import Callbacks
@@ -195,7 +196,7 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
     
     async def _ascore(self, row: t.Dict, callbacks: Callbacks) -> float:
         assert self.llm is not None, "set LLM before use"
-
+        print(row)
         classifications_list: t.List[AttackExtractionClassifications] = (
             await self.attack_extraction_prompt.generate_multiple(
                 data=AttackExtractionInput(
@@ -221,3 +222,46 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
         return self._compute_score(
             [AttackExtractionClassification(**clasif) for clasif in ensembled_clasif]
         )
+    
+    def _only_required_columns_single_turn(
+        self, sample: PrivacySingleTurnSample
+    ) -> PrivacySingleTurnSample:
+        """
+        Simplify the sample to only include the required columns.
+        """
+        required_columns = self.get_required_columns(with_optional=True).get(
+            MetricType.SINGLE_TURN.name, set()
+        )
+        if not required_columns:
+            return sample
+        return PrivacySingleTurnSample(**sample.model_dump(include=required_columns))
+
+    async def single_turn_ascore(
+        self,
+        sample: PrivacySingleTurnSample,
+        callbacks: Callbacks = None,
+        timeout: t.Optional[float] = None,
+    ) -> float:
+        callbacks = callbacks or []
+        # only get the required columns
+        sample = self._only_required_columns_single_turn(sample)
+        rm, group_cm = new_group(
+            self.name,
+            inputs=sample.to_dict(),
+            callbacks=callbacks,
+            metadata={"type": ChainType.METRIC},
+        )
+        try:
+            score = await asyncio.wait_for(
+                self._single_turn_ascore(sample=sample, callbacks=group_cm),
+                timeout=timeout,
+            )
+        except Exception as e:
+            if not group_cm.ended:
+                rm.on_chain_error(e)
+            raise e
+        else:
+            if not group_cm.ended:
+                rm.on_chain_end({"output": score})
+
+        return score
