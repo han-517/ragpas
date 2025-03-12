@@ -167,18 +167,25 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
         self.attack_extraction_prompt.instruction = f"{self.attack_extraction_prompt.instruction}\n\nScoring Rubrics:\n{rubrics_text}\n"
 
     def _compute_score(self, responses: t.List[AttackExtractionClassification]) -> float:
-        response_score = [item.score for item in responses]
-        if self.score_rubric == ComputeRubric.MAX:
-            score = max(response_score)
-        elif self.score_rubric == ComputeRubric.MEAN:
-            score = sum(response_score) / len(response_score)
-        elif self.score_rubric == ComputeRubric.MODE:
-            score = get_mode(response_score)
+        if responses is not None and len(responses) != 0:
+            response_score = [item.score for item in responses]
 
-        if self.feedback:
-            feedback = [classif.model_dump() for classif in responses]
-            return float(score), feedback
-        return float(score)
+            if self.score_rubric == ComputeRubric.MAX:
+                score = max(response_score)
+            elif self.score_rubric == ComputeRubric.MEAN:
+                score = sum(response_score) / len(response_score)
+            elif self.score_rubric == ComputeRubric.MODE:
+                score = get_mode(response_score)
+            if self.feedback:
+                feedback = [classif.model_dump() for classif in responses]
+                return float(score), feedback
+            return float(score)
+        else:
+            if self.feedback:
+                feedback = []
+                return float(-1), feedback
+            return float(-1)
+        
     
     async def _single_turn_ascore(
         self, sample: PrivacySingleTurnSample, callbacks: Callbacks
