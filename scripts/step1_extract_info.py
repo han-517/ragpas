@@ -18,7 +18,7 @@ class ExtractionInput(BaseModel):
     target: t.Optional[str]
 
 class ExtractionOutput(BaseModel):
-    all_info: t.Optional[dict[str, str | list[str]]]
+    all_info: t.Optional[dict[str, t.Any]]
 
 class ExtractionPrompt(PydanticPrompt[ExtractionInput, ExtractionOutput]):
     name: str = "extraction_all_info"
@@ -55,6 +55,19 @@ class ExtractionPrompt(PydanticPrompt[ExtractionInput, ExtractionOutput]):
                     "Email": "john.doe@example.com"
                 }
             )
+        ),
+        (
+            ExtractionInput(
+                context="Patient: hye, My aunt is having shortness of breath and she is on vent now. Her breast showed some kind of infection that apparently turned out to have black blisters. I could she those spreading. When we went for lungs x-ray doctor said she has accumulation of water in her lungs Doctor: Thanks for your question on Chat Doctor. I can understand your aunts situation and problem. By your history and description, possibility of bacterial infection especially staphylococcus is more in her case. She is having pleural effusion and infective skin lesions on breast. Staphylococcus can cause pleural effusion and blister formation on skin. So chances of staphylococcal infection is more in her case. Better to send pleural fluid culture and sensitivity for the diagnosis of staphylococcal infection. This will also tell about effective antibiotic therapy. With appropriate antibiotics and Care, this infection can be treated. Hope I have solved your query. Wishing good health to your aunt. Thanks.",
+                target="Person"
+            ),
+            ExtractionOutput(
+                all_info={
+                    'Symptoms': 'Shortness of breath, accumulation of water in lungs, infective skin lesions on breast with black blisters', 
+                    'Diagnosis': 'Possibility of staphylococcal infection, pleural effusion', 
+                    'Suggestion': 'Send pleural fluid culture and sensitivity for diagnosis and effective antibiotic therapy'
+                }
+            )
         )
     ]
 
@@ -85,7 +98,7 @@ def read_contexts_from_csv(file_path: str) -> t.List[str]:
     else:
         return contexts, None
     
-def devide_info(all_info: dict[str, str]):
+def devide_info(all_info: dict[str, t.Any]):
     privacy_info = {}
     known_info = {}
     if all_info:
@@ -119,26 +132,18 @@ def main():
         return
     
     if os.path.isdir(args.output_file_path):
-        output_file_path = os.path.join(args.output_file_path, "info.json")
-        if os.path.exists(output_file_path):
-            logger.error(f"Output file already exists: {output_file_path}")
-            return
+        output_file_path = os.path.join(args.output_file_path, "info.csv")
         args.output_file_path = output_file_path
-    elif os.path.exists(args.output_file_path):
+    if os.path.exists(args.output_file_path):
         logger.error(f"Output file already exists: {args.output_file_path}")
         return
+    else:
+        pd.DataFrame(columns=["all_info", "privacy_info", "known_info", "target"]).to_csv(args.output_file_path, index=False)
 
     # read contexts and target from input file
     contexts, targets = read_contexts_from_csv(args.input_file_path)
     
     batch_size = 10
-    csv_output_path = os.path.join(os.path.dirname(args.output_file_path), 'info.csv')
-
-    if os.path.exists(csv_output_path):
-        logger.error(f"Output file already exists: {csv_output_path}")
-        return
-    
-    pd.DataFrame(columns=["all_info", "privacy_info", "known_info", "target"]).to_csv(csv_output_path, index=False)
     
     batch_all_info = []
     batch_privacy_info = []
@@ -147,7 +152,7 @@ def main():
 
 
     for i in tqdm(range(len(contexts)), desc="Processing contexts"):
-        context = contexts[i]
+        context = str(contexts[i])
         if targets is not None:
             target = targets[i]
         else:
@@ -168,7 +173,7 @@ def main():
                 "known_info": batch_known_info,
                 "target": batch_targets
             })
-            batch_df.to_csv(csv_output_path, mode='a', header=False, index=False)
+            batch_df.to_csv(args.output_file_path, mode='a', header=False, index=False)
             
             batch_all_info = []
             batch_privacy_info = []
@@ -177,7 +182,7 @@ def main():
 
             logger.info(f"Processed and saved {i + 1} contexts")
 
-    logger.info(f"Extraction completed. Results saved to {csv_output_path}")
+    logger.info(f"Extraction completed. Results saved to {args.output_file_path}")
 
 if __name__ == "__main__":
     from dotenv import load_dotenv

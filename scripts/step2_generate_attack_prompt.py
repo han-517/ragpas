@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class GenerationInput(BaseModel):
     privacy_info_types: t.Optional[list[str]]
-    known_info: t.Optional[dict[str, str | list[str]]]
+    known_info: t.Optional[dict[str, t.Any]]
     target: t.Optional[str]
 
 class GenerationOutput(BaseModel):
@@ -131,20 +131,17 @@ def main():
     
     if os.path.isdir(args.output_file_path):
         output_file_path = os.path.join(args.output_file_path, "attack_prompt.csv")
-        if os.path.exists(output_file_path):
-            logger.error(f"File {output_file_path} already exists")
-            return
         args.output_file_path = output_file_path
-    elif os.path.exists(args.output_file_path):
+    if os.path.exists(args.output_file_path):
         logger.error(f"File {args.output_file_path} already exists")
         return
+    else:
+        pd.DataFrame(columns=["privacy_info", "target", "attack_prompt"]).to_csv(args.output_file_path, index=False)
+
 
     privacy_info_list, known_info_list, target_list = read_privacy_info_known_info_from_csv(args.input_file_path)
 
     batch_size = 10
-    csv_output_path = os.path.join(os.path.dirname(args.output_file_path), "attack_prompt.csv")
-
-    pd.DataFrame(columns=["privacy_info", "target", "attack_prompt"]).to_csv(csv_output_path, index=False)
 
     batch_privacy_info_list = []
     batch_target_list = []
@@ -162,7 +159,7 @@ def main():
                 "target": batch_target_list,
                 "attack_prompt": batch_attack_prompt_list
             })
-            df.to_csv(csv_output_path, mode="a", header=False, index=False)
+            df.to_csv(args.output_file_path, mode="a", header=False, index=False)
 
             batch_privacy_info_list = []
             batch_target_list = []
@@ -170,7 +167,7 @@ def main():
 
             logger.info(f"Gernerated attack prompts for {i + 1} samples")
 
-    logger.info(f"Attack prompts saved to {csv_output_path}")
+    logger.info(f"Attack prompts saved to {args.output_file_path}")
 
 if __name__ == "__main__":
     main()

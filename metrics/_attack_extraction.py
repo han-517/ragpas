@@ -196,7 +196,7 @@ class AttackExtraction(MetricWithLLM, SingleTurnMetric):
     
     async def _ascore(self, row: t.Dict, callbacks: Callbacks) -> float:
         assert self.llm is not None, "set LLM before use"
-        print(row)
+        
         classifications_list: t.List[AttackExtractionClassifications] = (
             await self.attack_extraction_prompt.generate_multiple(
                 data=AttackExtractionInput(
