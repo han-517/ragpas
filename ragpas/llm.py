@@ -20,21 +20,23 @@ def get_llm(model: str) -> LangchainLLMWrapper:
         api_key=os.environ.get('OPENAI_API_KEY'),
         model=model_dict[model],
         base_url=os.environ.get('OPENAI_API_URL'),
-        openai_proxy="http://127.0.0.1:7890"
+        openai_proxy="http://127.0.0.1:7897"
     ))
 
 def get_embeddings(model: str) -> LangchainEmbeddingsWrapper:
     # check if the model is supported
     model_dict = {
         'text-embedding': 'text-embedding-3-large',
+        'doubao-embedding': 'doubao-embedding-large-text-240915',
     }
     if model not in model_dict:
         raise ValueError(f"Model {model} is not supported. Supported models are {model_dict.keys()}")
     return LangchainEmbeddingsWrapper(OpenAIEmbeddings(
-        api_key=os.environ.get('OPENAI_API_KEY'),
+        api_key=os.environ.get('EMBEDDING_API_KEY'),
         model=model_dict[model],
-        base_url=os.environ.get('OPENAI_API_URL'),
-        openai_proxy="http://127.0.0.1:7890"
+        dimensions=os.environ.get("EMBEDDING_DIMENSIONS", None),
+        base_url=os.environ.get('EMBEDDING_API_URL'),
+        openai_proxy="http://127.0.0.1:7897"
     ))
 
 if __name__ == '__main__':
@@ -46,7 +48,7 @@ if __name__ == '__main__':
             model='deepseek-ai/deepseek-r1',
             api_key=os.environ.get('OPENAI_API_KEY'),
             base_url=os.environ.get('OPENAI_API_URL'),
-            openai_proxy="http://127.0.0.1:7890"
+            openai_proxy="http://127.0.0.1:7897"
         )
     
     system_template = "Translate the following from English into {language}"

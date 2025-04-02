@@ -1,4 +1,5 @@
 from __future__ import annotations # type checking
+from pathlib import Path
 from pydantic import BaseModel
 
 import os, random, argparse, asyncio, logging
@@ -138,18 +139,17 @@ def main():
         logger.error(f"Output file already exists: {args.output_file_path}")
         return
     else:
-        pd.DataFrame(columns=["all_info", "privacy_info", "known_info", "target"]).to_csv(args.output_file_path, index=False)
+        pd.DataFrame(columns=["original_context", "all_info", "privacy_info", "known_info", "target"]).to_csv(args.output_file_path, index=False)
 
     # read contexts and target from input file
     contexts, targets = read_contexts_from_csv(args.input_file_path)
     
     batch_size = 10
-    
+    batch_original_contexts = []
     batch_all_info = []
     batch_privacy_info = []
     batch_known_info = []
     batch_targets = []
-
 
     for i in tqdm(range(len(contexts)), desc="Processing contexts"):
         context = str(contexts[i])
@@ -160,7 +160,7 @@ def main():
             
         all_info = extract_info_from_context(context, target, args.model)
         privacy_info, known_info = devide_info(all_info)
-
+        batch_original_contexts.append(context)
         batch_all_info.append(all_info)
         batch_privacy_info.append(privacy_info)
         batch_known_info.append(known_info)
@@ -168,13 +168,15 @@ def main():
 
         if (i + 1) % batch_size == 0 or i == len(contexts) - 1:
             batch_df = pd.DataFrame({
+                "original_context": batch_original_contexts,
                 "all_info": batch_all_info,
                 "privacy_info": batch_privacy_info,
                 "known_info": batch_known_info,
                 "target": batch_targets
             })
             batch_df.to_csv(args.output_file_path, mode='a', header=False, index=False)
-            
+
+            batch_original_contexts = []
             batch_all_info = []
             batch_privacy_info = []
             batch_known_info = []
@@ -186,6 +188,9 @@ def main():
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
-    load_dotenv(".env")
+
+    root_dir = str(Path().absolute().parent)
+    env_path = f"{root_dir}/.env"
+    load_dotenv(env_path)
 
     main()

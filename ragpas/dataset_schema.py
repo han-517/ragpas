@@ -10,3 +10,6 @@ class PrivacySingleTurnSample(BaseSample):
     privacy_info: t.Optional[dict] | t.Optional[str] = None
     purpose: t.Optional[str] = None
     rubrics: t.Optional[t.Dict[str, str]] = None
+    target: t.Optional[str] = None
+    known_info: t.Optional[str] = None
+    extension_fields: t.Optional[t.Dict[str, t.Any]] = None
