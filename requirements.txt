@@ -1,3 +1,0 @@
-ragas
-langchain-openai
-rouge_score

@@ -14,14 +14,14 @@ from ragas.metrics.base import (
     ensembler,
 )
 from ragas.prompt import PydanticPrompt
-from ragpas.dataset_schema import PrivacySingleTurnSample
+from ragpas.schemas.calculate import PrivacySingleTurnSample
 from ragas.callbacks import ChainType, new_group
 
 if t.TYPE_CHECKING:
     from langchain_core.callbacks import Callbacks
 
 from enum import Enum
-from ragpas.utils import get_mode
+from ragpas.utils.math import get_mode
 
 logger = logging.getLogger(__name__)
 

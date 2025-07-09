@@ -1,0 +1,49 @@
+[project]
+name = "ragpas"
+version = "0.0.1"
+description = "A evaluation framework for RAG systems."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Wu Jionghan"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "ragas",
+    "langchain-openai",
+    "rouge_score",
+    "langgraph>=0.5.0",
+    "tomli>=1.2.0;python_version<'3.11'",
+    "tomli-w>=1.2.0",
+    "chromadb>=1.0.15",
+    "pytest>=8.4.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/han-517/ragpas"
+Repository = "https://github.com/han-517/ragpas"
+Issues = "https://github.com/han-517/ragpas/issues"
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*"]
+
+[tool.uv]
+# uv specific configurations can be added here
+dev-dependencies = [
+    # Add development dependencies here if needed
+]

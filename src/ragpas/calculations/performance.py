@@ -1,5 +1,5 @@
 import asyncio
-from ragpas.llm import get_llm, get_embeddings
+from ragpas.utils.llm import get_llm, get_embeddings
 from ragas import SingleTurnSample
 from ragas.metrics import ContextRecall, ResponseRelevancy, SemanticSimilarity, ExactMatch, RougeScore, BleuScore
 
